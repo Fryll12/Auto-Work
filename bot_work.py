@@ -2,43 +2,43 @@ import discum
 import re
 import time
 import threading
-import requests
 import os
+import requests
 from dotenv import load_dotenv
+from keep_alive import keep_alive
 
 load_dotenv()
 
 tokens = os.getenv("TOKENS").split(",")
 channel_id = "1389250541590413363"
+karuta_id = "646937666251915264"
 delay_between_rounds = 44100  # 12 tiếng 15 phút
 
-karuta_id = "646937666251915264"
-
-def create_bot(token, acc_index):
-    bot = discum.Client(token=token, log={"console": False, "file": False})
+def auto_work(token, acc_index):
+    bot = discum.Client(token=token, log=False)
     headers = {"Authorization": token, "Content-Type": "application/json"}
     step = {"value": 0}
 
     def send_karuta_command():
-        print(f"[Acc {acc_index+1}] Gửi lệnh 'kc o:ef'...")
+        print(f"[Acc {acc_index+1}] → Gửi lệnh 'kc o:ef'")
         bot.sendMessage(channel_id, "kc o:ef")
 
     def send_kn_command():
         step["value"] = 1
-        print(f"[Acc {acc_index+1}] Gửi lệnh 'kn'...")
+        print(f"[Acc {acc_index+1}] → Gửi lệnh 'kn'")
         bot.sendMessage(channel_id, "kn")
 
     def send_kw_command():
         step["value"] = 2
-        print(f"[Acc {acc_index+1}] Gửi lệnh 'kw'...")
+        print(f"[Acc {acc_index+1}] → Gửi lệnh 'kw'")
         bot.sendMessage(channel_id, "kw")
 
-    def click_tick(chan_id, msg_id, custom_id, app_id, guild_id):
+    def click_tick(msg_id, custom_id, app_id, guild_id):
         try:
             payload = {
                 "type": 3,
                 "guild_id": guild_id,
-                "channel_id": chan_id,
+                "channel_id": channel_id,
                 "message_id": msg_id,
                 "application_id": app_id,
                 "session_id": "a",
@@ -46,11 +46,11 @@ def create_bot(token, acc_index):
             }
             r = requests.post("https://discord.com/api/v9/interactions", headers=headers, json=payload)
             if r.status_code == 204:
-                print(f"[Acc {acc_index+1}] Click tick thành công!")
+                print(f"[Acc {acc_index+1}] → Click tick thành công")
             else:
-                print(f"[Acc {acc_index+1}] Click thất bại! Mã lỗi: {r.status_code}, Nội dung: {r.text}")
+                print(f"[Acc {acc_index+1}] → Click tick lỗi: {r.status_code} - {r.text}")
         except Exception as e:
-            print(f"[Acc {acc_index+1}] Lỗi: {str(e)}")
+            print(f"[Acc {acc_index+1}] → Lỗi click tick: {e}")
 
     @bot.gateway.command
     def on_message(resp):
@@ -65,10 +65,9 @@ def create_bot(token, acc_index):
                 desc = m["embeds"][0].get("description", "")
                 card_codes = re.findall(r"\bv[a-zA-Z0-9]{6}\b", desc)
                 if card_codes:
-                    print(f"[Acc {acc_index+1}] Mã thẻ lấy được: {', '.join(card_codes[:5])}")
+                    print(f"[Acc {acc_index+1}] → Mã thẻ: {', '.join(card_codes[:5])}")
                     for i, code in enumerate(card_codes[:5]):
-                        suffix = chr(97 + i)
-                        bot.sendMessage(channel_id, f"kjw {code} {suffix}")
+                        bot.sendMessage(channel_id, f"kjw {code} {chr(97 + i)}")
                         time.sleep(1.5)
                     time.sleep(1)
                     send_kn_command()
@@ -80,7 +79,7 @@ def create_bot(token, acc_index):
                     match = re.search(r"\d+\.\s*`([^`]+)`", lines[1])
                     if match:
                         resource = match.group(1)
-                        print(f"[Acc {acc_index+1}] Tài nguyên chọn: {resource}")
+                        print(f"[Acc {acc_index+1}] → Tài nguyên chọn: {resource}")
                         bot.sendMessage(channel_id, f"kjn `{resource}` a b c d e")
                         time.sleep(1)
                         send_kw_command()
@@ -94,25 +93,26 @@ def create_bot(token, acc_index):
                         for btn in comp["components"]:
                             if btn["type"] == 2:
                                 last_custom_id = btn["custom_id"]
-                                print(f"[Acc {acc_index+1}] Phát hiện button, custom_id: {last_custom_id}")
-
                 if last_custom_id:
-                    click_tick(channel_id, msg_id, last_custom_id, app_id, guild_id)
+                    click_tick(msg_id, last_custom_id, app_id, guild_id)
                     step["value"] = 3
 
-    def run_bot():
-        bot.gateway.run()
+    bot.gateway.run()
 
-    threading.Thread(target=run_bot, daemon=True).start()
-    time.sleep(3)
-    send_karuta_command()
+# Hàm chạy tuần tự từng acc
+def run_all():
+    while True:
+        for idx, token in enumerate(tokens):
+            print(f"\n=== BẮT ĐẦU AUTO WORK ACC {idx+1} ===")
+            auto_work(token, idx)
+            print(f"=== HOÀN THÀNH ACC {idx+1}, CHỜ 2 PHÚT TIẾP THEO ===")
+            time.sleep(120)
+        print("\n=== HOÀN THÀNH 12 ACC, CHỜ 12 TIẾNG 15 PHÚT ===")
+        time.sleep(delay_between_rounds)
 
-# Vòng lặp chính 12 acc tuần tự
+keep_alive()
+
+threading.Thread(target=run_all, daemon=True).start()
+
 while True:
-    for idx, token in enumerate(tokens):
-        print(f"=== BẮT ĐẦU ACC {idx+1} ===")
-        create_bot(token, idx)
-        # Đợi acc hoàn thành logic (ước lượng 2 phút mỗi acc, có thể chỉnh)
-        time.sleep(120)
-    print(f"=== Hoàn thành 12 acc, chờ 12 tiếng 15 phút ===")
-    time.sleep(delay_between_rounds)
+    time.sleep(60)
