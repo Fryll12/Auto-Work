@@ -16,22 +16,16 @@ delay_between_rounds = 44100  # 12 tiếng 15 phút
 
 def auto_work(token, acc_index):
     bot = discum.Client(token=token, log=False)
-    headers = {"Authorization": token, "Content-Type": "application/json"}
-    step = {"value": 0}
+    headers = {"Authorization": token}
 
-    def send_karuta_command():
+    def send_full_work():
         print(f"[Acc {acc_index+1}] → Gửi lệnh 'kc o:ef'")
         bot.sendMessage(channel_id, "kc o:ef")
-
-    def send_kn_command():
-        step["value"] = 1
-        print(f"[Acc {acc_index+1}] → Gửi lệnh 'kn'")
+        time.sleep(8)
         bot.sendMessage(channel_id, "kn")
-
-    def send_kw_command():
-        step["value"] = 2
-        print(f"[Acc {acc_index+1}] → Gửi lệnh 'kw'")
+        time.sleep(8)
         bot.sendMessage(channel_id, "kw")
+        time.sleep(8)
 
     def click_tick(msg_id, custom_id, app_id, guild_id):
         try:
@@ -60,59 +54,32 @@ def auto_work(token, acc_index):
                 return
             author_id = str(m.get("author", {}).get("id", ""))
             guild_id = m.get("guild_id")
+            if author_id != karuta_id:
+                return
 
-            if step["value"] == 0 and author_id == karuta_id and "embeds" in m and len(m["embeds"]) > 0:
-                desc = m["embeds"][0].get("description", "")
-                card_codes = re.findall(r"\bv[a-zA-Z0-9]{6}\b", desc)
-                if card_codes:
-                    print(f"[Acc {acc_index+1}] → Mã thẻ: {', '.join(card_codes[:5])}")
-                    for i, code in enumerate(card_codes[:5]):
-                        bot.sendMessage(channel_id, f"kjw {code} {chr(97 + i)}")
-                        time.sleep(1.5)
-                    time.sleep(1)
-                    send_kn_command()
-
-            elif step["value"] == 1 and author_id == karuta_id and "embeds" in m and len(m["embeds"]) > 0:
-                desc = m["embeds"][0].get("description", "")
-                lines = desc.split("\n")
-                if len(lines) >= 2:
-                    match = re.search(r"\d+\.\s*`([^`]+)`", lines[1])
-                    if match:
-                        resource = match.group(1)
-                        print(f"[Acc {acc_index+1}] → Tài nguyên chọn: {resource}")
-                        bot.sendMessage(channel_id, f"kjn `{resource}` a b c d e")
-                        time.sleep(1)
-                        send_kw_command()
-
-            elif step["value"] == 2 and author_id == karuta_id and "components" in m:
+            if "components" in m:
                 msg_id = m["id"]
                 app_id = m.get("application_id", karuta_id)
-                last_custom_id = None
                 for comp in m["components"]:
                     if comp["type"] == 1:
                         for btn in comp["components"]:
                             if btn["type"] == 2:
-                                last_custom_id = btn["custom_id"]
-                if last_custom_id:
-                    click_tick(msg_id, last_custom_id, app_id, guild_id)
-                    step["value"] = 3
+                                custom_id = btn["custom_id"]
+                                click_tick(msg_id, custom_id, app_id, guild_id)
+                                return
 
+    def run_cycle():
+        while True:
+            send_full_work()
+            time.sleep(delay_between_rounds)
+
+    threading.Thread(target=run_cycle, daemon=True).start()
     bot.gateway.run()
-
-# Hàm chạy tuần tự từng acc
-def run_all():
-    while True:
-        for idx, token in enumerate(tokens):
-            print(f"\n=== BẮT ĐẦU AUTO WORK ACC {idx+1} ===")
-            auto_work(token, idx)
-            print(f"=== HOÀN THÀNH ACC {idx+1}, CHỜ 2 PHÚT TIẾP THEO ===")
-            time.sleep(120)
-        print("\n=== HOÀN THÀNH 12 ACC, CHỜ 12 TIẾNG 15 PHÚT ===")
-        time.sleep(delay_between_rounds)
 
 keep_alive()
 
-threading.Thread(target=run_all, daemon=True).start()
+for idx, token in enumerate(tokens):
+    threading.Thread(target=auto_work, args=(token, idx), daemon=True).start()
 
 while True:
     time.sleep(60)
