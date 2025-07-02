@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Tạo web keep_alive giữ cho bot không bị ngắt trên Render
 app = Flask('')
 
 @app.route('/')
@@ -24,13 +23,12 @@ def keep_alive():
     t = Thread(target=run_web)
     t.start()
 
-# Lấy token từ biến môi trường
 tokens = os.getenv("TOKENS").split(",")
 
 CHANNEL_ID = "1389250541590413363"
 KARUTA_ID = "646937666251915264"
-DELAY_BETWEEN_ACC = 10  # 10 giây giữa mỗi acc
-DELAY_AFTER_ALL = 44100  # 12 tiếng 15 phút sau khi chạy hết 12 acc
+DELAY_BETWEEN_ACC = 10
+DELAY_AFTER_ALL = 44100
 
 def run_bot(token, acc_index):
     bot = discum.Client(token=token, log={"console": False, "file": False})
@@ -90,15 +88,26 @@ def run_bot(token, acc_index):
             if step["value"] == 0 and author_id == KARUTA_ID and 'embeds' in m and len(m['embeds']) > 0:
                 desc = m['embeds'][0].get('description', '')
                 card_codes = re.findall(r'\bv[a-zA-Z0-9]{6}\b', desc)
-                if card_codes:
-                    print(f"[Acc {acc_index}] Mã thẻ lấy được: {', '.join(card_codes[:5])}")
-                    for i, code in enumerate(card_codes[:5]):
+                if card_codes and len(card_codes) >= 10:
+                    first_5 = card_codes[:5]
+                    last_5 = card_codes[-5:]
+
+                    print(f"[Acc {acc_index}] Mã đầu: {', '.join(first_5)}")
+                    print(f"[Acc {acc_index}] Mã cuối: {', '.join(last_5)}")
+
+                    for i, code in enumerate(last_5):
                         suffix = chr(97 + i)
                         if i == 0:
                             time.sleep(2)
                         else:
                             time.sleep(1.5)
                         bot.sendMessage(CHANNEL_ID, f"kjw {code} {suffix}")
+
+                    for i, code in enumerate(first_5):
+                        suffix = chr(97 + i)
+                        time.sleep(1.5)
+                        bot.sendMessage(CHANNEL_ID, f"kjw {code} {suffix}")
+
                     time.sleep(1)
                     send_kn_command()
                     step["value"] = 1
@@ -155,6 +164,5 @@ def main_loop():
         print(f"[Hệ thống] Hoàn thành 12 acc, chờ {DELAY_AFTER_ALL} giây để lặp lại...")
         time.sleep(DELAY_AFTER_ALL)
 
-# Khởi động web keep_alive rồi chạy bot
 keep_alive()
 main_loop()
